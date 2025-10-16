@@ -1,0 +1,14 @@
+# Core numerical libraries
+numpy>=1.24.0
+scipy>=1.10.0
+pandas>=2.1.0
+
+# Plotting and visualization
+matplotlib>=3.7.0
+
+# JIT acceleration
+numba>=0.58.0
+
+# Fast Fourier Transform (optional speedup)
+pyfftw>=0.13.1
+
