@@ -2,7 +2,20 @@
 # -*- coding= utf-8 -*-
 """
 Created on Thu Feb 22 18=11=41 2024
-This example uses okadas solution for equal grids over VS and VW patches 
+This example performs simulations of sequences of earthquakes and aseismic slip 
+(SEAS) Benchmark Problem 1 (BP1). 
+
+
+Erickson, B. A.,
+J. Jiang, M. Barall, N. Lapusta,
+E. M. Dunham, R. Harris, L. S. Abrahams,
+K. L. Allison, J.-P. Ampuero, S. Barbot, et al.
+(2020). The Community Code Verification
+Exercise for Simulating Sequences of
+Earthquakes and Aseismic Slip (SEAS),
+Seismol. Res. Lett. 91, 874–890,
+doi: 10.1785/0220190248.
+
 @author= sopaci
 """
 
@@ -11,19 +24,22 @@ import matplotlib.pyplot as plt
 import sys
 import os 
 
-sys.path.append( os.path.join(os.path.expanduser("~"),'simcode/src'))
+
+## Change to your BEM_2 path
+sys.path.append( os.path.join(os.path.expanduser("~"),'BEM_2D/src'))
 
 from process import process
 import pandas as pd 
 import pickle
+
 from parameter_dictionary import p
 
-year = 365*24*3600;
+year = 365*24*3600; # seconds to year convert
 
 
-p['state'] = 0  # state 0=aging, 1=slip law
-p['computation_kernel'] = 1   
-p['solver'] = 0      # time solver
+p['state'] = 0                  # state 0=aging, 1=slip law
+p['computation_kernel'] = 2     #2 for Spectral BEM    
+p['solver'] = 0      # 0:RK Fehlberg, 1: RK Cash-Karp, 2: Adam's method 
 p['prefix']= '' 
 p['N_fault']= 1 
 p['friction_law'] = 1     # friction law 0:original, 1:regularized
@@ -39,7 +55,7 @@ amax = 0.025;
 p['a'] = amax
 p['b'] = b = 0.015;
 p['dc'] = dc = 8e-3;
-p['v_pl'] = v_pl = 1e-9; #% this will need a modification in Qdyn's source. (V_PL != V_SS)
+p['v_pl'] = v_pl = 1e-9
 p['v_0'] = v_0 = 1e-9;
 p['v_ss'] = v_ss = 1e-6;
 p['mu_0'] = mu_0 = 0.6;
@@ -47,8 +63,13 @@ p['H'] = H = 15000;
 p['h'] = h =3000;
 p['L'] = L =40000;
 p['W'] = -1
-dz = 25; 
-p['t_f'] = 3000*year;
+
+
+## size of the cell
+dz = 50; 
+
+
+p['t_f'] = 700*year;
 p['nu'] = 0.0
 
 p['dip'] = 90    # dipping angle
@@ -74,9 +95,6 @@ aa[n1:n2] = a0 + (amax - a0)*(zz[n1:n2] - H - dz/2)/ (h+dz/2) ;
 aa[n2:N] = amax;
 
 
-
-
-
 aa_v = aa[::-1]
 # aa_v = aa
 zz_v = -L-3*dz/2 + zz
@@ -99,13 +117,13 @@ print('L/Lc: %1.1f', L/Lc);
 
 ## Solver parameters
 p['t_ini'] = 0    #initial time
-p['dt_ini'] = 1e-6  # initial time step
+p['dt_ini'] = 1e-4  # initial time step
 p['dt_max'] = 1e8  # maximum time step allowed by the solver
-p['dt_min'] = 1e-6   # minimum time step allowed by the solver 
-p['err_tol'] = 1e-10   # error tolerance for the solver
-p['max_iter'] = 50    # maximum iteration 
+p['dt_min'] = 1e-4   # minimum time step allowed by the solver 
+p['err_tol'] = 1e-8   # error tolerance for the solver
+p['max_iter'] = 100    # maximum iteration 
 p['ot_interval'] = 100     # 
-p['ox_interval'] = 8       # space snapshot interval 
+p['ox_interval'] = 2       # space snapshot interval 
 p['max_interval'] = 100    # time snapshots
 p['i_step'] = -1          # starting step 
 p['print'] = True         # printing on the screen option
@@ -133,9 +151,11 @@ p['mesh']['theta_ini'] = theta_0
 p['mesh']['slip_ini'] = np.zeros(N) 
 
 
-root_target = '/Users/eyup/workspace/runs/SCEC'
+
+# Define your target directory
+root_target = '/Users/eyup/workspace/runs/SCEC/SBEM'
     
-fname = 'BP1'
+fname = f'BP1_{dz}'
 target_folder = os.path.join(root_target, fname)
 p['target_path']= target_folder # 
 
