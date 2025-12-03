@@ -14,7 +14,7 @@ BEM_2D implements 2D elastostatic boundary integral equations with rate-and-stat
 - Stress transfer and afterslip  
 - Simplified spring-slider analogs
 
-The code is fully written in **Python**, with performance-critical kernels accelerated using **Numba** for Just-In-Time (JIT) compilation.
+The code is entirely written in **Python**, with performance-critical kernels accelerated using **Numba** for Just-In-Time (JIT) compilation.
 
 ---
 
@@ -24,8 +24,8 @@ The code is fully written in **Python**, with performance-critical kernels accel
 - **Numba Acceleration:** Efficient JIT-compiled numerical kernels.
 - **Rate-and-State Friction:** Includes both aging and slip laws.
 - **Spring-Slider Systems:** One- and two-block configurations for conceptual studies.
-- **Visualization:** Built-in tools for slip rate, stress, slip profiles and animations.
-- **Industrial Activities** 3D BOussinesq's solution provides investigation of anthropgenic effects.
+- **Visualization:** Built-in tools for slip rate, stress, slip profiles, and animations.
+- **Industrial Activities** 3D Boussinesq's solution provides an  investigation of anthropogenic effects.
 
 ---
 
@@ -37,5 +37,10 @@ Clone and install the package using:
 git clone https://github.com/yourusername/BEM_2D.git
 cd BEM_2D
 pip install -r requirements.txt
+
+## References
+
+For citation
+Sopacı, E., & Özacar, A. A. (2025). Simulation of large earthquake synchronization and implications on North Anatolian fault zone. Tectonophysics, 914, 230902. https://doi.org/10.1016/j.tecto.2025.230902
 
 # THE CODE DEVELOPMENT HAS BEEN ONGOING!
