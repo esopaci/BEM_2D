@@ -50,8 +50,3 @@ cd BEM_2D
 pip install -r requirements.txt
 
 ---
-
-## References
-
-For citation
-Sopacı, E., & Özacar, A. A. (2025). Simulation of large earthquake synchronization and implications on North Anatolian fault zone. Tectonophysics, 914, 230902. https://doi.org/10.1016/j.tecto.2025.230902
