@@ -13,6 +13,8 @@ import matplotlib.pyplot as plt
 import numpy as np
 import os
 import sys
+from scipy.interpolate import interp1d
+
 
 from os.path import expanduser
 home = expanduser("~")
@@ -27,21 +29,25 @@ class Ptool:
 
     names_ox = ['step', 't', 'x', 'y', 'z', 'v', 'theta', 'tau', 'CFF', 'slip', 'sigma']
     # fmt="%15.0f%24.14E%15.7E%15.7E%15.7E%15.7E%26.16E%20.12E%15.7E%15.7E%20.12E%15.0f"
-    vc = 1e-3
+    vc = 1e-2
     tc = 60
     def __init__(self, d):
     
         self.d = d # root directory to the simulation results
-        
+        self.snapshot_folder = f'{self.d}/snapshots'
         # output file for maximum slip rate
         self.otmax_file = os.path.join(self.d,  
-                        [x for x in os.listdir(self.d) if x.endswith('vmax')][0] 
+                        [x for x in os.listdir(self.d) if x.endswith('Vmax.txt')][0] 
                                        )
         
         # output file for space and time. 
-        self.ox_file = os.path.join(self.d, 
-                        [x for x in os.listdir(self.d) if x.endswith('ox')][0] 
-                                    )
+        ## Find the snapshot steps 
+        snapshot_steps = [int(x[5:]) for x in os.listdir(self.snapshot_folder) if x.startswith('step')]
+        
+        self.snapshot_steps = np.sort(snapshot_steps)
+        # self.ox_file = os.path.join(self.d, 
+        #                 [x for x in os.listdir(self.d) if x.endswith('ox')][0] 
+        #                             )
         
         # input parameters as a pickle file
         pars_file = os.path.join(self.d, 
@@ -63,55 +69,55 @@ class Ptool:
 
 
 
-    def read_ox_1( self ):
-        '''
-        This function reads the space-time output file. 
-        If the output is a dense file, avoid using this function
+    # def read_ox_1( self ):
+    #     '''
+    #     This function reads the space-time output file. 
+    #     If the output is a dense file, avoid using this function
 
-        Returns
-        -------
-        df0 : TYPE
-            DESCRIPTION.
+    #     Returns
+    #     -------
+    #     df0 : TYPE
+    #         DESCRIPTION.
 
-        '''
+    #     '''
         
                 
                                     
-        df0 = pd.read_csv(self.ox_file, sep='\s+',
-                          header = None,
-                            comment='#', 
-                            )
-        df0.columns = self.names_ox
+    #     df0 = pd.read_csv(self.ox_file, sep='\s+',
+    #                       header = None,
+    #                         comment='#', 
+    #                         )
+    #     df0.columns = self.names_ox
     
-        return df0
+    #     return df0
     
     
-    def read_ox_2(self, skip=0, n_snaphots = 1):
-        '''
-        This function reads the space-time output file as step by step. 
-        If the output file is dense, reading this way is more appropriate. 
+    # def read_ox_2(self, skip=0, n_snaphots = 1):
+    #     '''
+    #     This function reads the space-time output file as step by step. 
+    #     If the output file is dense, reading this way is more appropriate. 
 
-        Parameters
-        ----------
-        skip : integer, optional
-            number of the snapshot. The default is 0.
+    #     Parameters
+    #     ----------
+    #     skip : integer, optional
+    #         number of the snapshot. The default is 0.
 
-        Returns
-        -------
-        df0 : TYPE
-            DESCRIPTION.
+    #     Returns
+    #     -------
+    #     df0 : TYPE
+    #         DESCRIPTION.
 
-        '''
+    #     '''
                 
-        skip0 = int( skip * (self.NN_sample + 1)-1)
+    #     skip0 = int( skip * (self.NN_sample + 1)-1)
                                     
-        df0 = pd.read_csv(self.ox_file, nrows=self.NN_sample * n_snaphots,
-                          sep='\s+', encoding="utf-8", 
-                          skiprows = skip0, comment = '#')
+    #     df0 = pd.read_csv(self.ox_file, nrows=self.NN_sample * n_snaphots,
+    #                       sep='\s+', encoding="utf-8", 
+    #                       skiprows = skip0, comment = '#')
   
-        df0.columns = self.names_ox
+    #     df0.columns = self.names_ox
 
-        return df0
+    #     return df0
     
     # def compute_slip(self, interval = 100):
     #     '''
@@ -280,330 +286,234 @@ class Ptool:
                                     )
         
 
-    def plot_slip_profile( self, interval = 10, vc = 1e-5, crit_size=10, tint_steps = (2, 20)  ):
-
-        tfast_step = tint_steps[0]
-        tslow_step = tint_steps[1] * self.t_yr
+    def plot_slip_profile( self, Vmin = -9, Vmax = 0):
 
         
-        fig, ax = plt.subplots(1,1, figsize = (6,10), clear = True)
+        ## Get the slip isntances 
+        # df_slip_inst = self.get_coseismic_instances()
+        list_of_steps = self.snapshot_steps.copy()
         
-        ax.set_ylabel('depth [yr]')
-        ax.set_xlabel('slip')
+        ox = pd.read_csv( f'{self.snapshot_folder}/step_0', sep = '\\s+')
+        Nx = ox.shape[0]
+        Nt = len(list_of_steps) - 1
         
-        ox = self.read_ox_1()
+        slip_array = np.zeros((Nt,Nx)) 
+        V_array = np.zeros((Nt,Nx)) 
+        Z_array = np.zeros((Nt,Nx))         
         
-        
-        # Get unique coordinates and sort them
-        x_unique = ox['z'].unique()
-        sort_inds = np.argsort(x_unique)
-        x_unique = x_unique[sort_inds]
-        
-        # Get unique times and sort them
-        t_vals = np.sort(ox["t"].unique())
-        
-        # # Check that warm-up time is not greater than simulation time
-        # if warm_up > t_vals.max():
-        #     print("Warm-up time > simulation time!")
-        #     return
-        warm_up = 0
-        # Determine index for warm-up time
-        ind_warmup = np.where(t_vals >= warm_up)[0][0]
-        
-        # Get the number of unique coordinates and number of time steps
-        Nx = len(x_unique)
-        Nt = len(t_vals) - 1
-        
-        # Define the slice and shape for the data
-        slice = np.s_[Nx * ind_warmup:Nx * Nt]
-        data_shape = (Nt - ind_warmup, Nx)
-        
-        # Get the data values and reshape them
-        x = ox['z'][slice].values.reshape(data_shape)[:, sort_inds]
-        slip = ox["slip"][slice].values.reshape(data_shape)[:, sort_inds]
-        v = ox["v"][slice].values.reshape(data_shape)[:, sort_inds]
-        t = ox["t"][slice].values.reshape(data_shape)[:, sort_inds]
+        # Loop over the files 
+        for i,step in enumerate(list_of_steps[1:]):
+            ox = pd.read_csv( f'{self.snapshot_folder}/step_{step}', sep = '\\s+')
 
-        
-        # # Cluster the slip rates > vc0. This is the first clustering 
-        # # detecting both creeping slow slips and fast ruptures. 
-        # mask = np.array(v>vc,dtype=bool) * 1
-        # s = ndimage.generate_binary_structure(2,2)
-        # lw, num = ndimage.measurements.label(mask, structure=s)
-        
-        # # remove the clusters whose sizes are small
-        # sizes = ndimage.sum(mask, lw, range(num + 1))
-        # mask_size = sizes < crit_size
-        # remove_pixel = mask_size[lw]
-        # lw[remove_pixel] = 0
-        
-        # # re-define and sort the labels and detect their position
-        # labels = np.unique(lw)
-        # lw = np.searchsorted(labels, lw)
-        # locs = ndimage.find_objects(lw)
-        
-        # for loc in locs:
+            slip_array[i,:] = ox.Slip.to_numpy()
+            V_array[i,:] = ox.V.to_numpy()
+            Z_array[i,:] = ox.Z.to_numpy()
             
-        #         # Find fust ruptures
-        #         mask = np.array(v[loc]>vc, dtype=bool) * 1
+        from matplotlib.colors import LogNorm
 
-        #         # Cluster the fast ruptures
-        #         lw2, num2 = ndimage.label(mask, structure=s)
-                                            
-        #         # remove the clusters whose sizes are small
-        #         sizes = ndimage.sum(mask, lw2, range(num2 + 1))
-        #         mask_size = sizes < crit_size
-        #         remove_pixel = mask_size[lw2]
-        #         lw2[remove_pixel] = 0
-                
-        #         # re-define and sort the labels and detect their position
-        #         labels = np.unique(lw2)
-        #         lw2 = np.searchsorted(labels, lw2)
-                
-        #         # Find the extend of the fast and aftershocks. 
-        #         locs2 = ndimage.find_objects(lw2) 
-                
-        #         for loc2 in locs2:
-        #                         # estimate the statics of the rupture instances  
-        #             rate2 = v[loc][loc2]
-        #             slip2 = slip[loc][loc2]
-        #             xx2 = x[loc][loc2]
-        #             tt2 = t[loc][loc2]
-        #             tt_max, tt_min = tt2.max(), tt2.min()
-                
-        #             Ntt, Nxx = xx2.shape
+        fig, ax= plt.subplots(1,1, figsize = (8,8))
+        ax.set_ylabel('Depth [km]')
+        ax.set_xlabel('Slip [m]')
+        
+        CS = ax.contourf( slip_array, -Z_array*1e-3, V_array,
+                    levels=np.logspace(Vmin,Vmax,100), norm = LogNorm(),
+                                     cmap="jet", vmin =10**Vmin, vmax=10**Vmax, extend = 'both')
 
-        #             time_int=np.arange(tt_min, tt_max, tfast_step)
-        #             Ntt = time_int.size    
-        #             slip_int = np.empty((time_int.size, Nxx))
-        #             rate_int = np.empty_like(slip_int)
-        #             xx_int = np.repeat(xx2[0,:],Ntt).reshape(Nxx,Ntt).T
-
-        #             for ix in range(Nxx):
-        #                 f = interpolate.interp1d(tt2[:,ix], slip2[:,ix])     
-        #                 slip_int[:,ix] = f(time_int)
-        #                 f = interpolate.interp1d(tt2[:,ix], rate2[:,ix])     
-        #                 rate_int[:,ix] = f(time_int)
-
-        #             for ii in range(time_int.size):
-                        
-        #                 points = np.array([xx_int[ii,:], slip_int[ii,:]]).T.reshape(-1, 1, 2)
-        #                 segments = np.concatenate([points[:-1], points[1:]], axis=1)
-        #                 lc = matplotlib.collections.LineCollection(segments, array=rate_int[ii,:], 
-        #                                                             cmap='jet', norm=matplotlib.colors.LogNorm(),
-        #                                           linewidth=0.4, alpha=1)
-        #                 ax.add_collection(lc)
-                        
-        #                 del points, segments, lc
+        CB = fig.colorbar(CS, orientation="vertical", ticks=[10**Vmin, 10**((Vmax+Vmin)//2), 10**Vmax],
+                          location='right', shrink=0.3, pad = 0.01, label = 'Slip rate [m/s]')
         
         
-        
-        for i in range(1, slip.shape[0],interval):
-            
-            # if v[i,:].any() > vc:
-            #     ax.plot( slip[i,:] , x[i,:], color = 'r', lw = 0.5)
-
-            # elif v[i,:].all() <= vc and v[i,:].any()>1e-8:
-            #     ax.plot( slip[i,:] , x[i,:], color = 'b', lw = 0.5)
-            # else : 
-            ax.plot( slip[i,:] , x[i,:], color = 'k', lw = 0.8)
-
-                
-                
-
-
-            
         fig.savefig(os.path.join(self.d, 'slip_profile.jpg'), dpi=200,
                                       bbox_inches='tight',
                                     )
 
+    # def plot_slip_profile1( self, warm_up = 0, vmin = -12, vmax = 0 ):
 
-    def plot_slip_profile1( self, warm_up = 0, vmin = -12, vmax = 0 ):
+    #     ox = self.read_ox_1()
 
-        ox = self.read_ox_1()
-
-        warm_up *= self.t_yr
+    #     warm_up *= self.t_yr
         
-        ox = ox[ox.t>warm_up]
+    #     ox = ox[ox.t>warm_up]
         
-        z_unique = ox.z.unique() 
-        y_unique = ox.y.unique() 
-        x_unique = np.zeros_like(z_unique)
+    #     z_unique = ox.z.unique() 
+    #     y_unique = ox.y.unique() 
+    #     x_unique = np.zeros_like(z_unique)
 
-        s_unique = ox.step.unique() 
+    #     s_unique = ox.step.unique() 
         
-        Nz = z_unique.size 
-        Ns = s_unique.size
+    #     Nz = z_unique.size 
+    #     Ns = s_unique.size
         
-        slip_0 = ox.slip.iloc[0:Nz].to_numpy()
+    #     slip_0 = ox.slip.iloc[0:Nz].to_numpy()
         
-        t = ox.t.to_numpy().reshape(Ns,Nz)
-        v = ox.v.to_numpy().reshape(Ns,Nz) 
-        slip = ox.slip.to_numpy().reshape(Ns,Nz) - slip_0
-        z = ox.z.to_numpy().reshape(Ns,Nz)
-
-
-
-        from matplotlib.colors import LogNorm
-
-        fig, ax= plt.subplots(1,1, figsize = (8,8))
-        ax.set_ylabel('depth [km]')
-        ax.set_xlabel('slip [m]')
-        
-        CS = ax.contourf( slip, z*1e-3, v,
-                    levels=np.logspace(vmin,vmax,100), norm = LogNorm(),
-                                     cmap="jet", vmin =10**vmin, vmax=10**vmax, extend = 'both')
-
-        Lb = self.pars['G'] * self.pars['mesh']['dc'][0] / self.pars['mesh']['bb'][0] / self.pars['mesh']['sigma_ini'][0] 
-        
-        z_min = z_unique.min() 
-        slip_max = slip.max()
-        
-        # ax.plot([slip_max-0.02, slip_max-0.02], [z_min*1e-3, (z_min+Lb)*1E-3], lw = 3, color = 'k')        
-
-        # ax.text(slip_max-0.01, (z_min+Lb/2)*1E-3, 'Lb')        
-        # ax.plot([slip_max-0.06, slip_max-0.06], [z_min*1e-3, (z_min+4*Lb)*1E-3], lw = 3, color = 'k')        
-        # ax.text(slip_max-0.01, (z_min+Lb/2)*1E-3, 'Lb')    
-        # ax.text(slip_max-0.06, (z_min+Lb*2)*1E-3, '4Lb')    
-        
-        CB = fig.colorbar(CS, orientation="vertical", ticks=[10**vmin, 10**((vmax+vmin)//2), 10**vmax],
-                          location='right', shrink=0.3, pad = -0.1)
-
-        
-        fig.savefig(os.path.join(self.d, 'slip_profile1.jpg'), dpi=200,
-                                      bbox_inches='tight',)
+    #     t = ox.t.to_numpy().reshape(Ns,Nz)
+    #     v = ox.v.to_numpy().reshape(Ns,Nz) 
+    #     slip = ox.slip.to_numpy().reshape(Ns,Nz) - slip_0
+    #     z = ox.z.to_numpy().reshape(Ns,Nz)
 
 
 
-    def plot_slip_profile2( self, warm_up = 0, vmin = -12, vmax = 0):
+    #     from matplotlib.colors import LogNorm
 
-        ox = self.read_ox_1()
+    #     fig, ax= plt.subplots(1,1, figsize = (8,8))
+    #     ax.set_ylabel('depth [km]')
+    #     ax.set_xlabel('slip [m]')
+        
+    #     CS = ax.contourf( slip, z*1e-3, v,
+    #                 levels=np.logspace(vmin,vmax,100), norm = LogNorm(),
+    #                                  cmap="jet", vmin =10**vmin, vmax=10**vmax, extend = 'both')
 
-        warm_up *= self.t_yr
+    #     Lb = self.pars['G'] * self.pars['mesh']['dc'][0] / self.pars['mesh']['bb'][0] / self.pars['mesh']['sigma_ini'][0] 
         
-        ox = ox[ox.t>warm_up]
+    #     z_min = z_unique.min() 
+    #     slip_max = slip.max()
         
-        z_unique = ox.z.unique() 
-        y_unique = ox.y.unique() 
-        x_unique = np.zeros_like(z_unique)
-        
-        mask = ox['step'] == ox['step'].max()
-        ox = ox[~mask]
+    #     # ax.plot([slip_max-0.02, slip_max-0.02], [z_min*1e-3, (z_min+Lb)*1E-3], lw = 3, color = 'k')        
 
-        s_unique = ox.step.unique() 
+    #     # ax.text(slip_max-0.01, (z_min+Lb/2)*1E-3, 'Lb')        
+    #     # ax.plot([slip_max-0.06, slip_max-0.06], [z_min*1e-3, (z_min+4*Lb)*1E-3], lw = 3, color = 'k')        
+    #     # ax.text(slip_max-0.01, (z_min+Lb/2)*1E-3, 'Lb')    
+    #     # ax.text(slip_max-0.06, (z_min+Lb*2)*1E-3, '4Lb')    
         
-        V_dyn = 2* np.max((self.pars['mesh']['aa']-self.pars['mesh']['bb'])) * self.pars['mesh']['sigma_ini'].min() * self.pars['c_s']/ self.pars['G']
-        print(V_dyn)
-        
-        Nz = z_unique.size 
-        Ns = s_unique.size
-        
-        slip_0 = ox.slip.iloc[0:Nz].to_numpy()
-        
-        t = ox.t.to_numpy().reshape(Ns,Nz)
-        v = ox.v.to_numpy().reshape(Ns,Nz) 
-        
-        # The index where the bottom cell has the largest slip rate
-        ind0 = v[:,0].argmax() +10000
-        
-        slip = ox.slip.to_numpy().reshape(Ns,Nz)[:ind0,:] - slip_0
-        z = ox.z.to_numpy().reshape(Ns,Nz)[:ind0,:]
-        CFF = ox.CFF.to_numpy().reshape(Ns,Nz)[:ind0,:]
-        v = v[:ind0,:]
-        t = t[:ind0,:]
+    #     CB = fig.colorbar(CS, orientation="vertical", ticks=[10**vmin, 10**((vmax+vmin)//2), 10**vmax],
+    #                       location='right', shrink=0.3, pad = -0.1)
 
-        indzmax = CFF[-1,:].argmax()
-        Ns = t.shape[0]
 
         
-        
-        from matplotlib.colors import LogNorm
-        from mpl_toolkits.axes_grid1.inset_locator import inset_axes
+    #     fig.savefig(os.path.join(self.d, 'slip_profile1.jpg'), dpi=200,
+    #                                   bbox_inches='tight',)
 
-        fig, (ax,ax1) = plt.subplots(1,2, figsize = (8,8), sharey = True,
-                                     gridspec_kw={'width_ratios': [3, 1]})
-        ax.set_ylabel('depth [km]')
-        ax.set_xlabel('slip [m]')
-        
-        CS = ax.contourf( slip, z*1e-3, v,
-                    levels=np.logspace(vmin,vmax,100), norm = LogNorm(),
-                                     cmap="seismic", vmin =10**vmin, vmax=10**vmax, extend = 'both')
-        axins1 = inset_axes(
-            ax,
-            width="4%",  # width: 50% of parent_bbox width
-            height="40%",  # height: 5%
-            loc=3,
-            bbox_to_anchor=(0.5, 0., 0.5, 0.5),
-            bbox_transform=ax.transAxes,
-            borderpad=0.5,
-        )
-        
-        axins1.xaxis.set_ticks_position("bottom")
-        CB = fig.colorbar(CS, cax=axins1, orientation="vertical", ticks=[10**vmin, 10**((vmax+vmin)//2), 10**vmax])
 
-        Lb = self.pars['G'] * self.pars['mesh']['dc'][0] / self.pars['mesh']['bb'][0] / self.pars['mesh']['sigma_ini'][0] 
-        
-        z_min = z_unique.min() 
-        slip_max = slip.max()
-        zz = z[0,indzmax]
-        
-        
-        # ax.plot([slip_max/4, slip_max/4], [(zz - Lb/2)*1e-3, (zz + Lb/2)*1e-3], lw = 3, color = 'k')        
-        # ax.text(slip_max/4, zz*1E-3, 'Lb')        
-        # ax.plot([2*slip_max/4, 2*slip_max/4], [(zz - Lb*2)*1e-3, (zz + Lb*2)*1e-3], lw = 3, color = 'k')        
-        # ax.text(slip_max*2/4, zz*1E-3, '4Lb')        
 
-        # for i in range(1, CFF.shape[0]-1, 1000):
+    # def plot_slip_profile2( self, warm_up = 0, vmin = -12, vmax = 0):
+
+    #     ox = self.read_ox_1()
+
+    #     warm_up *= self.t_yr
+        
+    #     ox = ox[ox.t>warm_up]
+        
+    #     z_unique = ox.z.unique() 
+    #     y_unique = ox.y.unique() 
+    #     x_unique = np.zeros_like(z_unique)
+        
+    #     mask = ox['step'] == ox['step'].max()
+    #     ox = ox[~mask]
+
+    #     s_unique = ox.step.unique() 
+        
+    #     V_dyn = 2* np.max((self.pars['mesh']['aa']-self.pars['mesh']['bb'])) * self.pars['mesh']['sigma_ini'].min() * self.pars['c_s']/ self.pars['G']
+    #     print(V_dyn)
+        
+    #     Nz = z_unique.size 
+    #     Ns = s_unique.size
+        
+    #     slip_0 = ox.slip.iloc[0:Nz].to_numpy()
+        
+    #     t = ox.t.to_numpy().reshape(Ns,Nz)
+    #     v = ox.v.to_numpy().reshape(Ns,Nz) 
+        
+    #     # The index where the bottom cell has the largest slip rate
+    #     ind0 = v[:,0].argmax() +10000
+        
+    #     slip = ox.slip.to_numpy().reshape(Ns,Nz)[:ind0,:] - slip_0
+    #     z = ox.z.to_numpy().reshape(Ns,Nz)[:ind0,:]
+    #     CFF = ox.CFF.to_numpy().reshape(Ns,Nz)[:ind0,:]
+    #     v = v[:ind0,:]
+    #     t = t[:ind0,:]
+
+    #     indzmax = CFF[-1,:].argmax()
+    #     Ns = t.shape[0]
+
+        
+        
+    #     from matplotlib.colors import LogNorm
+    #     from mpl_toolkits.axes_grid1.inset_locator import inset_axes
+
+    #     fig, (ax,ax1) = plt.subplots(1,2, figsize = (8,8), sharey = True,
+    #                                  gridspec_kw={'width_ratios': [3, 1]})
+    #     ax.set_ylabel('depth [km]')
+    #     ax.set_xlabel('slip [m]')
+        
+    #     CS = ax.contourf( slip, z*1e-3, v,
+    #                 levels=np.logspace(vmin,vmax,100), norm = LogNorm(),
+    #                                  cmap="seismic", vmin =10**vmin, vmax=10**vmax, extend = 'both')
+    #     axins1 = inset_axes(
+    #         ax,
+    #         width="4%",  # width: 50% of parent_bbox width
+    #         height="40%",  # height: 5%
+    #         loc=3,
+    #         bbox_to_anchor=(0.5, 0., 0.5, 0.5),
+    #         bbox_transform=ax.transAxes,
+    #         borderpad=0.5,
+    #     )
+        
+    #     axins1.xaxis.set_ticks_position("bottom")
+    #     CB = fig.colorbar(CS, cax=axins1, orientation="vertical", ticks=[10**vmin, 10**((vmax+vmin)//2), 10**vmax])
+
+    #     Lb = self.pars['G'] * self.pars['mesh']['dc'][0] / self.pars['mesh']['bb'][0] / self.pars['mesh']['sigma_ini'][0] 
+        
+    #     z_min = z_unique.min() 
+    #     slip_max = slip.max()
+    #     zz = z[0,indzmax]
+        
+        
+    #     # ax.plot([slip_max/4, slip_max/4], [(zz - Lb/2)*1e-3, (zz + Lb/2)*1e-3], lw = 3, color = 'k')        
+    #     # ax.text(slip_max/4, zz*1E-3, 'Lb')        
+    #     # ax.plot([2*slip_max/4, 2*slip_max/4], [(zz - Lb*2)*1e-3, (zz + Lb*2)*1e-3], lw = 3, color = 'k')        
+    #     # ax.text(slip_max*2/4, zz*1E-3, '4Lb')        
+
+    #     # for i in range(1, CFF.shape[0]-1, 1000):
             
-            # ax1.plot( CFF[i,:] * self.t_yr / 1000, z[-1,:] * 1e-3, color ='b', lw = 0.8)
+    #         # ax1.plot( CFF[i,:] * self.t_yr / 1000, z[-1,:] * 1e-3, color ='b', lw = 0.8)
             
-        # ax1.plot( np.min(CFF, axis=0) * self.t_yr / 1000, z[-1,:] * 1e-3, color ='b', lw = 0.8)
+    #     # ax1.plot( np.min(CFF, axis=0) * self.t_yr / 1000, z[-1,:] * 1e-3, color ='b', lw = 0.8)
         
-        ax1.plot( np.mean(CFF, axis=0) * self.t_yr / 1000, z[-1,:] * 1e-3, color ='b', lw = 2)
+    #     ax1.plot( np.mean(CFF, axis=0) * self.t_yr / 1000, z[-1,:] * 1e-3, color ='b', lw = 2)
 
-        # ax1.plot( np.max(CFF, axis=0) * self.t_yr / 1000, z[-1,:] * 1e-3, color ='b', lw = 0.8)
+    #     # ax1.plot( np.max(CFF, axis=0) * self.t_yr / 1000, z[-1,:] * 1e-3, color ='b', lw = 0.8)
 
-        # ax1.plot( CFF[-1,:] * self.t_yr / 1000, z[-1,:] * 1e-3, color ='b', lw = 0.8)
-
-        
-        # ax1.plot([CFF.max()* self.t_yr / 1000, CFF.max()* self.t_yr / 1000], [(zz - Lb/2)*1e-3, (zz + Lb/2)*1e-3], lw = 3, color = 'k')        
-        # ax1.plot([CFF.max()/2* self.t_yr / 1000, CFF.max()/2* self.t_yr / 1000], [(zz - Lb*2)*1e-3, (zz + Lb*2)*1e-3], lw = 3, color = 'k')        
+    #     # ax1.plot( CFF[-1,:] * self.t_yr / 1000, z[-1,:] * 1e-3, color ='b', lw = 0.8)
 
         
-        ax1.set_xlabel('$\\dot{\\tau_e}$ [kPa/y]')
+    #     # ax1.plot([CFF.max()* self.t_yr / 1000, CFF.max()* self.t_yr / 1000], [(zz - Lb/2)*1e-3, (zz + Lb/2)*1e-3], lw = 3, color = 'k')        
+    #     # ax1.plot([CFF.max()/2* self.t_yr / 1000, CFF.max()/2* self.t_yr / 1000], [(zz - Lb*2)*1e-3, (zz + Lb*2)*1e-3], lw = 3, color = 'k')        
+
         
-        CB.ax.set_ylabel("slip rate\n[m/s]")
+    #     ax1.set_xlabel('$\\dot{\\tau_e}$ [kPa/y]')
         
-        ax2 = inset_axes(ax,
-                    width="70%", # width = 30% of parent_bbox
-                    height=2., # height : 1 inch
-                    loc=5, borderpad = 2)
+    #     CB.ax.set_ylabel("slip rate\n[m/s]")
+        
+    #     ax2 = inset_axes(ax,
+    #                 width="70%", # width = 30% of parent_bbox
+    #                 height=2., # height : 1 inch
+    #                 loc=5, borderpad = 2)
         
         
 
         
-        # fig, ax= plt.subplots(1,1, figsize = (8,3))
-        ax2.semilogy(t[:,0] / self.t_yr, np.max(v, axis = 1), ls='-', color = 'b')
+    #     # fig, ax= plt.subplots(1,1, figsize = (8,3))
+    #     ax2.semilogy(t[:,0] / self.t_yr, np.max(v, axis = 1), ls='-', color = 'b')
 
-        ax2.axhline(V_dyn, ls='--', color = 'r')
+    #     ax2.axhline(V_dyn, ls='--', color = 'r')
         
-        ax2.set_xlabel('time [yr]')
+    #     ax2.set_xlabel('time [yr]')
         
-        ax2.set_ylabel('max(v) [m/s]')
+    #     ax2.set_ylabel('max(v) [m/s]')
         
-        # ax2.set_xlim(left=0)
+    #     # ax2.set_xlim(left=0)
         
-        ax3 = ax2.twiny()
-        ax3.semilogy((t[:,0] - self.pars['mass_removal']['t_onset']) / self.t_yr, np.max(v, axis = 1),
-                     ls = '-', lw = 0.7)
+    #     ax3 = ax2.twiny()
+    #     ax3.semilogy((t[:,0] - self.pars['mass_removal']['t_onset']) / self.t_yr, np.max(v, axis = 1),
+    #                  ls = '-', lw = 0.7)
         
-        ax3.grid() # vertical lines
+    #     ax3.grid() # vertical lines
         
-        ax3.set_xlabel('time since quarrying [yr]')
+    #     ax3.set_xlabel('time since quarrying [yr]')
 
         
-        fig.savefig(os.path.join(self.d, 'slip_profile.jpg'), dpi=200,
-                                      bbox_inches='tight',)
+    #     fig.savefig(os.path.join(self.d, 'slip_profile.jpg'), dpi=200,
+    #                                   bbox_inches='tight',)
         
-        # fig.savefig(os.path.join(self.d, 'time_series2.jpg'), dpi=200,
-        #                               bbox_inches='tight',)
+    #     # fig.savefig(os.path.join(self.d, 'time_series2.jpg'), dpi=200,
+    #     #                               bbox_inches='tight',)

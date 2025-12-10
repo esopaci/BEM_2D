@@ -29,7 +29,18 @@ The code is entirely written in **Python**, with performance-critical kernels ac
 
 ---
 
+## References
+
+<a id="1">[1]</a> 
+Sopacı, E., & Özacar, A. A. (2025). 
+Simulation of large earthquake synchronization and implications on North Anatolian fault zone. 
+Tectonophysics, 914, 230902. https://doi.org/10.1016/j.tecto.2025.230902
+
+---
+
 ## Installation
+
+---
 
 Clone and install the package using:
 
