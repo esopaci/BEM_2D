@@ -14,6 +14,8 @@ import numpy as np
 import os
 import sys
 from scipy.interpolate import interp1d
+from scipy.integrate import simpson
+import traceback
 
 
 from os.path import expanduser
@@ -326,6 +328,171 @@ class Ptool:
         fig.savefig(os.path.join(self.d, 'slip_profile.jpg'), dpi=200,
                                       bbox_inches='tight',
                                     )
+        
+        
+        
+    def extract_slip_info(self, V_dyn = 1e-1, G=32E9, L=15E9):
+        '''
+        This module reads PyQuake3D results recursively finds the slip events,
+        then extract information about the slip event. 
+        
+        Returns
+        -------
+        None.
+
+        '''        
+        dt_crit = 1e3 # critical time to distinguish slip events
+
+        df = self.read_vmaxfile()
+                
+        df1 = df[df.v>V_dyn]
+        
+        dtime = np.diff(df1.t.to_numpy(), prepend=0)
+        dtime = np.append(dtime, dt_crit)
+
+        ind_temp = np.argwhere(dtime>=dt_crit).flatten()
+        Nevents = ind_temp.size
+        
+        i_steps = df.istep.to_numpy()
+        
+        
+        event_string=f'{"Evnt":10}{"I_start":10}{"I_finish":10}{"Year":10}{"Day":10}{"Hour":10}{"Min":10}{"Duration":10}{"Nuc_z":10}{"Z_min":10}{"Z_max":10}{"slip_mean":10}{"slip_max":10}{"State_drop":16}{"Stress_drop":16}{"M0":16}{"Mw":16}\n'
+        
+        ## Loop over events
+        for i in range(Nevents-1):
+            
+            print(f'event {i+1}')
+            # Finding indcies of the slip events form maximum slip rate file
+            ind1 = int(ind_temp[i])
+            ind2 = int(ind_temp[i+1]) - 1  
+            
+            # Find the iteration step number 
+            iter1 = df1.iloc[ind1].istep
+            iter2 = df1.iloc[ind2].istep
+            
+            # earthquake_ind = df[(df.Iteration>=iter1) & (df.Iteration<=iter1)]['slip_v'].argmax()
+            
+            # Get the indices of the event
+            iter_indices = ((i_steps>=iter1) & (i_steps<=iter2))
+            step_min = i_steps[iter_indices].min() # Start index of the event
+            step_max = i_steps[iter_indices].max() # Finish index of the event
+            N_iter = i_steps[iter_indices].size
+            
+            # X_min = []
+            # X_max = []
+            # Y_min = []
+            # Y_max = []
+            Z_min = []
+            Z_max = []
+            
+            
+            MO_dot = np.empty(N_iter)
+            time = np.empty(N_iter)
+            # V_event = np.empty(N_iter)
+
+            try:
+                ## Loop during the event
+                for ii in range(N_iter):  
+                    step = i_steps[iter_indices][ii]
+    
+                    ox = pd.read_csv( f'{self.snapshot_folder}/step_{step}', sep = '\\s+')
+                    V = ox.V.to_numpy()
+                    Z = ox.Z.to_numpy()
+                    dz = np.diff(Z)[0]
+                    
+                    # mesh = self.read_mesh(step = step)
+    
+                    # Get data
+                    # cells = mesh.cells.reshape(-1, 4)   # 3 + node IDs for triangles
+                    # triangles = cells[:, 1:]         # drop the "3"
+                    # points = mesh.points[triangles]  # shape (n_cells, 3, 3)
+                    # points = np.mean(points, axis = 1 )
+                    
+                    # mesh_with_areas = mesh.compute_cell_sizes(area=True, volume=False)
+                    
+                    # Seismic moment release rate
+                                        
+                    # Find the index of slip rate exceeds dynamic slip rate
+                    ind_Vdyn = (V > V_dyn)
+                                        
+                    V = V[ind_Vdyn].copy()
+                    Z = Z[ind_Vdyn].copy()   
+                    # print(V.size, Z.size)
+                    # print(V.max(), Z.max())
+                    MO_dot[ii] = np.abs(np.sum(dz*dz*2*V*G))
+                    time[ii] = ox.Time.iloc[0]
+
+
+                    # X_min1 = points[ind_Vdyn,0].min()
+                    # X_min.append(X_min1)
+                    # X_max1 = points[ind_Vdyn,0].max()
+                    # X_max.append(X_max1)
+                    # Y_min1 = points[ind_Vdyn,1].min()
+                    # Y_min.append(Y_min1)
+                    # Y_max1 = points[ind_Vdyn,1].max()
+                    # Y_max.append(Y_max1)
+                    Z_min1 = ox.Z.min()
+                    Z_min.append(Z_min1)
+                    Z_max1 = ox.Z.max()
+                    Z_max.append(Z_max1)
+                    
+                    if ii == 0:
+                        # Nucleation Point
+                        Nuc = (Z_min1+Z_max1)*0.5
+                        
+                        # beginning of slip
+                        # Find the index of maximum state. At the end of the 
+                        # rupture we will compare the stress drop
+    
+                        # max_state_ind = mesh.cell_data['state'].argmax()
+                        slip_ini  = ox.Slip.to_numpy()
+                        shear_ini = ox.Tau_f.to_numpy()
+                        state_ini = ox.Theta.to_numpy()
+                
+                    elif ii == N_iter - 1 :
+                        
+                        # End of slip
+                        slip_end  = ox.Slip.to_numpy()
+                        shear_end = ox.Tau_f.to_numpy()
+                        state_end = ox.Theta.to_numpy()
+                        
+                # Seismic moment info
+                # Compute seismic moment and 
+                M0 = np.abs(simpson(MO_dot, x=time))
+                
+                Mw = 2/3 * (np.log10(M0) - 9.1)
+                # M0_dot_mean = 10**np.mean(np.log10(MO_dot))
+                
+                
+                slip_max = (slip_end - slip_ini).max() 
+                slip_mean = (slip_end - slip_ini).mean()                    
+                state_drop = (state_end - state_ini).mean()
+                stress_drop = (shear_end - shear_ini).mean() 
+                
+                Z_min = np.min(Z_min)
+                Z_max = np.max(Z_max)
+                
+                
+                # ttime = time[vv.argmax()]
+                ttime0 = time[0]
+                ttime1 = time[-1]
+                t_year = ttime0 // self.t_yr 
+                t_day  = (ttime0 / 3600 / 24 ) % 365
+                t_hour = (ttime0 / 3600 ) % 24
+                t_min  = (ttime0 / 60 ) % 60
+                t_dur = ttime1 - ttime0
+                
+                event_string += f'{i:5.0f}{step_min:10.0f}{step_max:10.0f}{t_year:10.0f}{t_day:10.0f}{t_hour:10.0f}{t_min:10.2f}{t_dur:10.2f}{Nuc:10.1f}{Z_min:10.1f}{Z_max:10.1f}{slip_mean:10.3f}{slip_max:10.3f}{state_drop:16.6E}{stress_drop:16.6E}{M0:16.6E}{Mw:16.3f}\n'
+
+                
+            except Exception as e:
+                print(e)
+                print(traceback.print_exc()) # Prints the full traceback to stderr
+
+                pass
+            
+        with open(os.path.join(self.d, "events.txt"), "w") as file:
+            file.write(event_string)
 
     # def plot_slip_profile1( self, warm_up = 0, vmin = -12, vmax = 0 ):
 
