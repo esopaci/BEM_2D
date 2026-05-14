@@ -12,12 +12,14 @@ import settings
 import pandas as pd 
 import os
 from boussinesqs import boussinesq_solution
-
+import pickle
+from scipy.interpolate import interp1d
 from scipy.integrate import ode
 
 
-def process(p, v_c  = 1e-3):
-
+def process(p, restart = 0, v_c  = 1e-3, extra = 2):
+    
+    tyr = 365*3600*24
     
     mode = p['computation_kernel'] 
     state_type = p['state_law'] 
@@ -85,6 +87,72 @@ def process(p, v_c  = 1e-3):
     # Used for stochastic loading source
     rng = np.random.default_rng()
 
+
+    
+    if restart == 1:
+        
+        (K, y_ini) = settings.intialize_input_files(p, target_path, 1)  
+
+        target_path = p['target_path']
+        snaphot_path = os.path.join(target_path, 'snapshots')
+        
+        # find the last snapshot 
+        lfiles = os.listdir(snaphot_path)
+        steps = [int(x.split('step_')[1]) for x in lfiles]
+        last_step = np.max(steps)
+        ox_last = pd.read_csv( f'{snaphot_path}/step_{last_step}', sep = '\\s+')
+        
+        # Open the file in read-binary mode
+        with open(f'{target_path}/p001.pickle', 'rb') as file:
+            # Load the object from the file
+            p = pickle.load(file)
+        
+        p['t_ini'] = ox_last['Time'].iloc[0]
+        p['i_step']= ox_last['Step'].iloc[0]
+        p['t_f']= p['t_f'] * extra
+
+        t = p['t_ini']
+        i_step = p['i_step']
+                    
+        keys1 = ['V', 'Theta', 'Slip', 'Sigma']
+        keys2= ['v_ini', 'theta_ini', 'slip_ini', 'sigma_ini']
+        prefix = p['prefix']
+
+        output_vmax = os.path.join(target_path, f'{prefix}_Vmax.txt')
+
+        
+        for (key1,key2) in zip(keys1,keys2):
+            f = interp1d(ox_last.Z, ox_last[f'{key1}'], kind='linear', fill_value="extrapolate")
+            p['mesh'][f'{key2}'] =  f(p['mesh']['zz'])
+            #Initial values
+            v_ini = p['mesh']['v_ini']
+            theta_ini = p['mesh']['theta_ini']
+            sigma_ini = p['mesh']['sigma_ini']
+            slip_ini = p['mesh']['slip_ini']
+            y_ini = np.concatenate((v_ini, theta_ini, sigma_ini, slip_ini))
+            
+            filevmax = open(output_vmax, "a") 
+            
+    else:
+        
+        # kernel and intial values
+        (K, y_ini) = settings.intialize_input_files(p, target_path, 1)  
+        filevmax = open(output_vmax, "w") 
+        line_max = '#istep,t,ind_max,v,theta,tau,slip,sigma_n\n'
+        filevmax.write(line_max)
+
+        
+    # if solver == 2:
+        
+    # def fun1(y, t, aa, bb, dc, v_pl, N_lam, N_kernel,CFF, K, nu, G, c_s, state_law, Nfault):
+        
+    #     return fun(y, t, 
+    #                        aa, bb, dc, v_pl, N_lam, N_kernel,
+    #                        CFF, K, nu, G, c_s, state_law, 1)
+    
+    
+    #INITIAL VALUES
+    y = y_ini
     ## Solver parameters
     t = p['t_ini']
     dt = p['dt_ini']
@@ -97,37 +165,15 @@ def process(p, v_c  = 1e-3):
     ot_interval = p['ot_interval']  
     ox_interval = p['ox_interval']  
     vmax_interval = p['max_interval']  
-    
     istep = p['i_step']
         
     CFF = np.zeros( N_lam )
-        
-    tyr = 365*3600*24
-    
+                
     output_vmax = os.path.join(target_path, f'{prefix}_Vmax.txt')
     snaphot_path = os.path.join(target_path, 'snapshots')
     
     if not os.path.isdir(snaphot_path): 
         os.mkdir(snaphot_path) 
-    
-    # kernel and intial values
-    (K, y_ini) = settings.intialize_input_files(p, target_path, 1)  
-            
-    filevmax = open(output_vmax, "w") 
-    
-    line_max = '#istep,t,ind_max,v,theta,tau,slip,sigma_n\n'
-    filevmax.write(line_max)
-    
-    #INITIAL VALUES
-    y = y_ini
-    
-    # if solver == 2:
-        
-    # def fun1(y, t, aa, bb, dc, v_pl, N_lam, N_kernel,CFF, K, nu, G, c_s, state_law, Nfault):
-        
-    #     return fun(y, t, 
-    #                        aa, bb, dc, v_pl, N_lam, N_kernel,
-    #                        CFF, K, nu, G, c_s, state_law, 1)
     
     r = ode( fun ).set_integrator('vode', method="adams", 
                                   rtol=tol, 
@@ -221,7 +267,6 @@ def process(p, v_c  = 1e-3):
                     istep, t, ind_max, y[ind_max], y[N_lam+ind_max], tau_f, y[3*N_lam+ind_max], y[2*N_lam+ind_max])
             
             filevmax.write(line_max)
-            
             
             if p['print']:
                 print('{:>12.4E}{:>12.4E}{:>12.4E}{:>12.4E}{:>12.4E}'.format(
