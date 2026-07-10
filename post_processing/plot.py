@@ -39,7 +39,7 @@ class Ptool:
         self.snapshot_folder = f'{self.d}/snapshots'
         # output file for maximum slip rate
         self.otmax_file = os.path.join(self.d,  
-                        [x for x in os.listdir(self.d) if x.endswith('Vmax.txt')][0] 
+                        [x for x in os.listdir(self.d) if x.endswith('output_vmax')][0] 
                                        )
         
         # output file for space and time. 
