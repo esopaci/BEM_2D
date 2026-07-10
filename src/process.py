@@ -118,8 +118,6 @@ def process(p, restart = 0, v_c  = 1e-3, extra = 2):
         keys2= ['v_ini', 'theta_ini', 'slip_ini', 'sigma_ini']
         prefix = p['prefix']
 
-        output_vmax = os.path.join(target_path, f'{prefix}_Vmax.txt')
-
         
         for (key1,key2) in zip(keys1,keys2):
             f = interp1d(ox_last.Z, ox_last[f'{key1}'], kind='linear', fill_value="extrapolate")
@@ -131,13 +129,13 @@ def process(p, restart = 0, v_c  = 1e-3, extra = 2):
             slip_ini = p['mesh']['slip_ini']
             y_ini = np.concatenate((v_ini, theta_ini, sigma_ini, slip_ini))
             
-            filevmax = open(output_vmax, "a") 
+            filevmax = open(f"{target_path}/output_vmax", "a") 
             
     else:
         
         # kernel and intial values
         (K, y_ini) = settings.intialize_input_files(p, target_path, 1)  
-        filevmax = open(output_vmax, "w") 
+        filevmax = open(f"{target_path}/output_vmax", "w") 
         line_max = '#istep,t,ind_max,v,theta,tau,slip,sigma_n\n'
         filevmax.write(line_max)
 
