@@ -13,7 +13,7 @@ import numpy as np
 from kernel import space_kernel, fft_kernel, spring_slider_kernel
 from friction import original_rsf, regularized_rsf, aging_law, slip_law
 from balance_equations import balance_eq_space,  balance_eq_fft_scipy, balance_eq_springslider,balance_eq_fft_periodic, balance_eq_fft_freesurface 
-from solver import rkck, rk_routine, scipy_ode
+from solver import rkck, rkf45, abm_adaptive
 
 # from scipy.integrate import ode
 
@@ -160,31 +160,20 @@ def initialize_kernels( state_type, friction_type, mode, solver_type, free_surfa
         init_kernel = space_kernel
         
     elif mode == 2:
-        if solver_type!=2:
-            if free_surface == 1:
-                fun = balance_eq_fft_freesurface
-            else:
-                fun = balance_eq_fft_periodic
-        # else:
-        #     fun =balance_eq_fft_nonumba
+        if free_surface == 1:
+            fun = balance_eq_fft_freesurface
+        else:
+            fun = balance_eq_fft_periodic
         init_kernel = fft_kernel
     
     # Time solver
     if solver_type == 0 :
-        solver = rk_routine
+        solver = rkf45
     elif solver_type == 1:
         solver = rkck
     elif solver_type == 2:
-        # Balance equation and kernel
-        solver = scipy_ode
+        solver = abm_adaptive
 
-        
-
-        # if mode == 0:
-        #     fun = balance_eq_space_scipy
-        # elif mode == 1:
-        #     fun = balance_eq_fft_scipy
-        #     init_kernel = fft_kernel  
        
     
     return ( friction_law, state_law, fun, init_kernel, solver)

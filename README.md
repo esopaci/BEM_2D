@@ -25,6 +25,7 @@ The code is entirely written in **Python**, with performance-critical kernels ac
 - **Rate-and-State Friction:** Includes both aging and slip laws.
 - **Spring-Slider Systems:** One- and two-block configurations for conceptual studies.
 - **Visualization:** Built-in tools for slip rate, stress, slip profiles, and animations.
+- **Time solvers for less stiff prblems (RK45) and moderately stiff problems (Adams-type predictor-corrector adaptive step)
 - **Industrial Activities** 3D Boussinesq's solution provides an  investigation of anthropogenic effects.
 
 ---
@@ -36,6 +37,12 @@ Sopacı, E., & Özacar, A. A. (2025).
 Simulation of large earthquake synchronization and implications on North Anatolian fault zone. 
 Tectonophysics, 914, 230902. https://doi.org/10.1016/j.tecto.2025.230902
 
+E. Sopacı, A.A. Özacar,
+Simulation of large earthquake synchronization and implications on North Anatolian fault zone,
+Tectonophysics,Volume 914,2025,230902, https://doi.org/10.1016/j.tecto.2025.230902.
+
+Eyüp Sopacı, Yann Klinger, Luca Dal Zilio et al. Tectonic loading rate controls magnitude–rupture-length scaling, 
+06 October 2026, PREPRINT (Version 1) available at Research Square [https://doi.org/10.21203/rs.3.rs-11147141/v1]
 ---
 
 ## Installation

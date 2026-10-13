@@ -139,14 +139,6 @@ def process(p, restart = 0, v_c  = 1e-3, extra = 2):
         line_max = '#istep,t,ind_max,v,theta,tau,slip,sigma_n\n'
         filevmax.write(line_max)
 
-        
-    # if solver == 2:
-        
-    # def fun1(y, t, aa, bb, dc, v_pl, N_lam, N_kernel,CFF, K, nu, G, c_s, state_law, Nfault):
-        
-    #     return fun(y, t, 
-    #                        aa, bb, dc, v_pl, N_lam, N_kernel,
-    #                        CFF, K, nu, G, c_s, state_law, 1)
     
     
     #INITIAL VALUES
@@ -173,19 +165,6 @@ def process(p, restart = 0, v_c  = 1e-3, extra = 2):
     if not os.path.isdir(snaphot_path): 
         os.mkdir(snaphot_path) 
     
-    r = ode( fun ).set_integrator('vode', method="adams", 
-                                  rtol=tol, 
-                                  min_step=dt_min, 
-                                  max_step=dt_max,
-                                  first_step=dt_min)   
-    # r = ode( fun ).set_integrator('dop853',
-    #                               atol=tol, 
-    #                               max_step=dt_max,
-    #                               first_step=dt_min)   
-    
-    r.set_initial_value( y, t )
-    r.set_f_params( aa, bb, dc, v_pl, N_lam, N_kernel,
-                   0, K, nu, G, c_s, state_law, 1)
     
     
     # V_dyn = 2 * sigma_n * (aa-bb).max() * c_s / G
@@ -208,14 +187,11 @@ def process(p, restart = 0, v_c  = 1e-3, extra = 2):
                 # CFF = dtau - mu * dsigma
 
                 CFF = dtau - mu_0 * dsigma
-                r.set_f_params( aa, bb, dc, v_pl, N_lam, N_kernel,
-                               CFF, K, nu, G, c_s, state_law, 1)
+
                 
             else:
                 
                 CFF = np.zeros( N_lam )
-                r.set_f_params( aa, bb, dc, v_pl, N_lam, N_kernel,
-                               CFF, K, nu, G, c_s, state_law, 1)
                 
                 
         if external_load == 1:
@@ -228,23 +204,15 @@ def process(p, restart = 0, v_c  = 1e-3, extra = 2):
                 # print(random_loading_coeff, CFF)
             else:
                 CFF = np.array([external_load_rate])           
-        
-        if solver_type==2:
-            r.integrate(tf, step=True)
-            dt = r.t - t
-            t = r.t
-            y = r.y
-            
-            
-        else:
-        
-            t, dt, y, err = solver(t, y, 
-                           dt, dt_max, dt_min, 
-                           aa, bb, dc, v_pl, 
-                           N_lam, N_ker, CFF, 
-                           K, nu, G, c_s, 
-                           fun, state_law, 1,
-                           max_iter, tf, tol)
+
+
+        t, dt, y, err = solver(t, y, 
+                       dt, dt_max, dt_min, 
+                       aa, bb, dc, v_pl, 
+                       N_lam, N_ker, CFF, 
+                       K, nu, G, c_s, 
+                       fun, state_law, 1,
+                       max_iter, tf, tol)
             
 
         
@@ -268,7 +236,7 @@ def process(p, restart = 0, v_c  = 1e-3, extra = 2):
             
             if p['print']:
                 print('{:>12.4E}{:>12.4E}{:>12.4E}{:>12.4E}{:>12.4E}'.format(
-                    dt, t/tyr, y[ind_max], y[N_lam+ind_max], np.abs(CFF).max()))            
+                    dt, t, y[ind_max], y[N_lam+ind_max], np.abs(CFF).max()))            
         
         if istep % ot_interval == 0 :
             

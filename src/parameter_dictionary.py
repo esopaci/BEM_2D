@@ -12,7 +12,7 @@ p = {
      'state_law' : 0,       # state 0:aging, 1:slip law
      'friction_law': 0,     # friction law 0:original, 1:regularized
      'computation_kernel' : 1,        # 0: spring-slider, 1: okada kernel, 2:fft kernel
-     'solver' : 0,          # time solver 0:Runge-kutta Fehlberg
+     'solver' : 0,          # 0:Rk45(Fehlberg); 1:RK-Cash-Karp; 2:Adams method (Predictor corrector for semi-stiff problems) 
      'prefix': '',          #
 
      ### FAULT PARAMETERS
@@ -37,7 +37,7 @@ p = {
     't_f' : 100,  # final time
     'dt_max' : 1e7,  # maximum time step allowed by the solver
     'dt_min' : 1e-6,   # minimum time step allowed by the solver 
-    'err_tol' : 1e-10,   # error tolerance for the solver
+    'err_tol' : 1e-7,   # error tolerance for the solver
     'max_iter' : 50,    # maximum iteration 
     'ot_interval' : 1,     # snapshots for time step
     'ox_interval' : 1,      # space snapshot interval 
